@@ -30,6 +30,7 @@ public:
     bool savePCD(const std::string& path) const;
     void viewPCD(const std::string& window_title = "Open3D Viewer") const;
     void killNBVTransform();
+    void printAllPointsToFile(const std::string& path) const;
 
     open3d::geometry::PointCloud* pcd;
 };

@@ -3,6 +3,19 @@
 #include "nbvtransform.hpp"
 #include <cmath>
 
+
+
+static bool parseVec3(const std::string& s, Eigen::Vector3d& out) {
+    std::string t = s;
+    for (char& ch : t) if (ch == ',') ch = ' ';
+    std::istringstream iss(t);
+
+    double a, b, c;
+    if (!(iss >> a >> b >> c)) return false;
+    out = Eigen::Vector3d(a, b, c);
+    return true;
+}
+
 static std::string prompt(const std::string& msg) {
     std::cout << msg;
     std::string s;
@@ -49,14 +62,16 @@ static void printTransformMenu() {
               << "1) Load PCD\n"
               << "2) Translate to world frame\n"
               << "3) Switch XYZ\n" 
-              << "4) View PCD\n"
-              << "5) Save PCD\n"
+              << "4) Crop BBX\n"
+              << "5) View PCD\n"
+              << "6) Save PCD\n"
+              << "7) Print all points to File\n"
               << "0) Back\n";
 }
 
 static void printVoxelMenu() {
     std::cout << "\n--- VOXELSTRUCT ---\n"
-              << "1) Option 1\n"
+              << "1) \n"
               << "2) Option 2\n"
               << "0) Back\n";
 }
@@ -68,7 +83,7 @@ static void printEllipsoidMenu() {
               << "0) Back\n";
 }
 
-// ---------- Submenu loops (empty actions for now) ----------
+// ---------- Submenu loops ----------
 static void nextBestViewMenu() {
     bool inMenu = true;
     while (inMenu) {
@@ -166,9 +181,34 @@ static void transformsMenu()
                 std::cout << "Load point cloud first.\n";
                 continue;
             }
-            transform.viewPCD("Transforms: PointCloud");
+
+            std::string minStr = prompt("Enter bbx_min (x,y,z): ");
+            std::string maxStr = prompt("Enter bbx_max (x,y,z): ");
+
+            Eigen::Vector3d bbx_min, bbx_max;
+            if (!parseVec3(minStr, bbx_min) || !parseVec3(maxStr, bbx_max)) {
+                std::cout << "Invalid input. Expected 3 numbers for each.\n";
+                continue;
+            }
+
+            // Optional safety: ensure min <= max per-axis
+            Eigen::Vector3d mn = bbx_min.cwiseMin(bbx_max);
+            Eigen::Vector3d mx = bbx_min.cwiseMax(bbx_max);
+
+            const size_t before = transform.pcd->points_.size();
+            transform.cropBBX(mn, mx, transform.pcd);
+            const size_t after = transform.pcd->points_.size();
+
+            std::cout << "Cropped BBX. Points: " << before << " -> " << after << "\n";
         }
         else if (c == "5") {
+            if (!pcd_loaded || transform.pcd == nullptr) {
+                std::cout << "Load point cloud first.\n";
+                continue;
+            }
+            transform.viewPCD("Transforms: PointCloud");
+        }
+        else if (c == "6") {
             if (!pcd_loaded || transform.pcd == nullptr) {
                 std::cout << "Load point cloud first.\n";
                 continue;
@@ -176,6 +216,14 @@ static void transformsMenu()
 
             std::string path = prompt("Enter output filename (without extension ok): ");
             transform.savePCD(path);
+        }
+        else if (c == "7") {
+            if (!pcd_loaded || transform.pcd == nullptr) {
+                std::cout << "Load point cloud first.\n";
+                continue;
+            }
+            std::string path = prompt("Enter output filename: ");
+            transform.printAllPointsToFile(path);
         }
         else {
             std::cout << "Invalid choice.\n";

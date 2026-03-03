@@ -1,5 +1,6 @@
 #include "nbvtransform.hpp"
 #include <open3d/io/PointCloudIO.h>
+#include <fstream>
 #include <iostream>
 #include <open3d/visualization/utility/DrawGeometry.h>
 #include <open3d/geometry/TriangleMesh.h>
@@ -120,7 +121,8 @@ void nbvtransform::switchXYZ(
     }
 }
 
-void nbvtransform::loadPCD(std::string path) {
+void nbvtransform::loadPCD(std::string path) 
+{
     if (!pcd)
         pcd = new open3d::geometry::PointCloud();
 
@@ -139,7 +141,8 @@ void nbvtransform::loadPCD(std::string path) {
     std::cout << "Points: " << pcd->points_.size() << "\n";
 }
 
-bool nbvtransform::savePCD(const std::string& path) const {
+bool nbvtransform::savePCD(const std::string& path) const 
+{
     if (!pcd || pcd->points_.empty()) {
         std::cout << "No point cloud loaded.\n";
         return false;
@@ -184,10 +187,44 @@ void nbvtransform::viewPCD(const std::string& window_title) const
     );
 }
 
-void nbvtransform::killNBVTransform() {
+void nbvtransform::killNBVTransform() 
+{
     if (pcd) {
         delete pcd;
         pcd = nullptr;
         std::cout << "Point cloud memory freed.\n";
     }
+}
+
+void nbvtransform::printAllPointsToFile(const std::string& path) const 
+{
+    if (!pcd) {
+        std::cout << "No point cloud loaded.\n";
+        return;
+    }
+
+    if (pcd->points_.empty()) {
+        std::cout << "Point cloud is empty.\n";
+        return;
+    }
+
+    std::ofstream out(path);
+    if (!out.is_open()) {
+        std::cout << "Failed to open file: " << path << "\n";
+        return;
+    }
+
+    out << "# index x y z\n";
+
+    for (size_t i = 0; i < pcd->points_.size(); ++i) {
+        const auto& p = pcd->points_[i];
+        out << i << " "
+            << p.x() << " "
+            << p.y() << " "
+            << p.z() << "\n";
+    }
+
+    out.close();
+    std::cout << "Wrote " << pcd->points_.size()
+              << " points to " << path << "\n";
 }
