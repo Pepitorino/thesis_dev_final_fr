@@ -46,7 +46,8 @@ void voxelstruct::insertPointCloud(
     tree->updateInnerOccupancy();
 }
 
-void voxelstruct::classifyVoxels() {
+void voxelstruct::classifyVoxels() 
+{
     this->surface_frontiers.clear();
     this->occupied_voxels.clear();
     this->roi_surface_frontier.clear();
@@ -198,6 +199,7 @@ void voxelstruct::showVoxelTree()
     open3d::visualization::DrawGeometries({cloud}, "Occupied Voxels (points)");
 }
 
-double voxelstruct::getResolution() {
+double voxelstruct::getResolution() 
+{
     return this->resolution;
 }
