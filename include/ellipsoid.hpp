@@ -11,6 +11,10 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+/*
+Need to change the parameters of the clustering and ellipsoids, looks weird when you actually run it
+*/
+
 class ellipsoid
 {
 public:

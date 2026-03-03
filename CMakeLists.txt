@@ -34,15 +34,12 @@ include_directories(
 
 add_definitions(${PCL_DEFINITIONS})
 
-# ----------------------
+# ----------------------    
 # Source files
 # ----------------------
 set(SOURCES
+    src/nbvtransform.cpp
     src/main.cpp
-    src/voxelstruct.cpp
-    src/nbvstrategy.cpp
-    src/ellipsoid.cpp
-    cuda/cuda_projection.cu
 )
 
 # ----------------------
