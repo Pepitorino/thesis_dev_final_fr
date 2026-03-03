@@ -30,6 +30,9 @@ public:
 
     void showVoxelTree();
 
+    void killVoxelStruct();
+    bool saveOctree(const std::string& path) const;
+
 private:
     double resolution;
     
@@ -39,4 +42,4 @@ private:
     std::vector<Eigen::Vector3d> surface_frontiers;
     std::vector<Eigen::Vector3d> occupied_voxels;
     std::vector<Eigen::Vector3d> roi_surface_frontier;
-}
+};

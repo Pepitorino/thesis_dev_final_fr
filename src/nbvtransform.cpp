@@ -187,6 +187,39 @@ void nbvtransform::viewPCD(const std::string& window_title) const
     );
 }
 
+void nbvtransform::printAllPointsToFile(const std::string& path) const 
+{
+    if (!pcd) {
+        std::cout << "No point cloud loaded.\n";
+        return;
+    }
+    
+    if (pcd->points_.empty()) {
+        std::cout << "Point cloud is empty.\n";
+        return;
+    }
+    
+    std::ofstream out(path);
+    if (!out.is_open()) {
+        std::cout << "Failed to open file: " << path << "\n";
+        return;
+    }
+    
+    out << "# index x y z\n";
+    
+    for (size_t i = 0; i < pcd->points_.size(); ++i) {
+        const auto& p = pcd->points_[i];
+        out << i << " "
+        << p.x() << " "
+        << p.y() << " "
+        << p.z() << "\n";
+    }
+    
+    out.close();
+    std::cout << "Wrote " << pcd->points_.size()
+    << " points to " << path << "\n";
+}
+
 void nbvtransform::killNBVTransform() 
 {
     if (pcd) {
@@ -194,37 +227,4 @@ void nbvtransform::killNBVTransform()
         pcd = nullptr;
         std::cout << "Point cloud memory freed.\n";
     }
-}
-
-void nbvtransform::printAllPointsToFile(const std::string& path) const 
-{
-    if (!pcd) {
-        std::cout << "No point cloud loaded.\n";
-        return;
-    }
-
-    if (pcd->points_.empty()) {
-        std::cout << "Point cloud is empty.\n";
-        return;
-    }
-
-    std::ofstream out(path);
-    if (!out.is_open()) {
-        std::cout << "Failed to open file: " << path << "\n";
-        return;
-    }
-
-    out << "# index x y z\n";
-
-    for (size_t i = 0; i < pcd->points_.size(); ++i) {
-        const auto& p = pcd->points_[i];
-        out << i << " "
-            << p.x() << " "
-            << p.y() << " "
-            << p.z() << "\n";
-    }
-
-    out.close();
-    std::cout << "Wrote " << pcd->points_.size()
-              << " points to " << path << "\n";
 }

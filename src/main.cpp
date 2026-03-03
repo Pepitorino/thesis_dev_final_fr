@@ -2,6 +2,7 @@
 #include <string>
 #include "nbvtransform.hpp"
 #include <cmath>
+#include "voxelstruct.hpp"
 
 
 
@@ -13,6 +14,24 @@ static bool parseVec3(const std::string& s, Eigen::Vector3d& out) {
     double a, b, c;
     if (!(iss >> a >> b >> c)) return false;
     out = Eigen::Vector3d(a, b, c);
+    return true;
+}
+
+static bool writeVec3ListToFile(
+    const std::string& path,
+    const std::vector<Eigen::Vector3d>& pts,
+    const std::string& header)
+{
+    std::ofstream out(path);
+    if (!out.is_open()) {
+        std::cout << "Failed to open file: " << path << "\n";
+        return false;
+    }
+    out << header << "\n";
+    for (size_t i = 0; i < pts.size(); ++i) {
+        out << i << " " << pts[i].x() << " " << pts[i].y() << " " << pts[i].z() << "\n";
+    }
+    std::cout << "Wrote " << pts.size() << " points to " << path << "\n";
     return true;
 }
 
@@ -71,8 +90,12 @@ static void printTransformMenu() {
 
 static void printVoxelMenu() {
     std::cout << "\n--- VOXELSTRUCT ---\n"
-              << "1) \n"
-              << "2) Option 2\n"
+              << "1) Initialize voxelstruct\n"
+              << "2) Insert pointcloud\n"
+              << "3) Show voxel tree\n"
+              << "4) Print voxels to file\n"
+              << "5) Print Surface Frontiers, Occupied, and ROI Surface Frontier voxels to file\n"
+              << "6) Save octree\n"
               << "0) Back\n";
 }
 
@@ -233,14 +256,124 @@ static void transformsMenu()
 
 static void voxelstructMenu() {
     bool inMenu = true;
+
+    voxelstruct* voxel_struct = nullptr;
+
+    // Keep last loaded point cloud alive as long as the menu is open
+    std::shared_ptr<open3d::geometry::PointCloud> last_pcd;
+
     while (inMenu) {
         printVoxelMenu();
         std::string c = prompt("Choice: ");
 
-        if (c == "0") inMenu = false;
-        else if (c == "1") { /* TODO */ }
-        else if (c == "2") { /* TODO */ }
-        else std::cout << "Invalid choice.\n";
+        if (c == "0") {
+            if (voxel_struct) {
+                voxel_struct->killVoxelStruct();
+                delete voxel_struct;
+                voxel_struct = nullptr;
+            }
+            last_pcd.reset();
+            std::cout << "voxelstruct memory freed\n";
+            inMenu = false;
+        }
+        else if (c == "1") {
+            // Initialize voxelstruct
+            std::string r = prompt("Enter resolution (e.g. 0.05): ");
+            double res = 0.0;
+            try { res = std::stod(r); }
+            catch (...) { std::cout << "Invalid resolution.\n"; continue; }
+
+            // re-init if already exists
+            if (voxel_struct) {
+                voxel_struct->killVoxelStruct();
+                delete voxel_struct;
+                voxel_struct = nullptr;
+            }
+
+            voxel_struct = new voxelstruct(res);
+            std::cout << "Initialized voxelstruct with resolution " << res << "\n";
+        }
+        else if (c == "2") {
+            // Insert pointcloud
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+
+            std::string path = prompt("Enter point cloud path: ");
+            last_pcd = std::make_shared<open3d::geometry::PointCloud>();
+
+            if (!open3d::io::ReadPointCloud(path, *last_pcd) || last_pcd->points_.empty()) {
+                std::cout << "Failed to load point cloud or empty: " << path << "\n";
+                last_pcd.reset();
+                continue;
+            }
+
+            std::string camStr = prompt("Enter camera position x,y,z: ");
+            Eigen::Vector3d cam;
+            if (!parseVec3(camStr, cam)) {
+                std::cout << "Invalid camera input.\n";
+                last_pcd.reset();
+                continue;
+            }
+
+            voxel_struct->insertPointCloud(last_pcd.get(), cam);
+            std::cout << "Inserted point cloud into octree.\n";
+        }
+        else if (c == "3") {
+            // Show voxel tree
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+            voxel_struct->showVoxelTree();
+        }
+        else if (c == "4") {
+            // Print occupied voxels to file (ensures classify is run)
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+
+            voxel_struct->classifyVoxels();
+            auto occ = voxel_struct->getOccupiedVoxels();
+
+            std::string outPath = prompt("Enter output filename: ");
+            writeVec3ListToFile(outPath, occ, "# index x y z");
+        }
+        else if (c == "5") {
+            // Print surface frontiers / occupied / ROI frontiers to files
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+
+            voxel_struct->classifyVoxels();
+
+            auto sf  = voxel_struct->getSurfaceFrontiers();
+            auto occ = voxel_struct->getOccupiedVoxels();
+            auto roi = voxel_struct->getROISurfaceFrontiers();
+
+            std::string base = prompt("Enter base filename (no extension): ");
+            if (base.empty()) base = "voxels";
+
+            writeVec3ListToFile(base + "_surface_frontiers.txt", sf,  "# surface_frontiers: index x y z");
+            writeVec3ListToFile(base + "_occupied.txt",          occ, "# occupied_voxels: index x y z");
+            writeVec3ListToFile(base + "_roi_frontiers.txt",     roi, "# roi_surface_frontier: index x y z");
+        }
+        else if (c == "6") {
+            // Save octree
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+
+            std::string outPath = prompt("Enter octree output filename (e.g. map.bt): ");
+            voxel_struct->saveOctree(outPath);
+        }
+        else {
+            std::cout << "Invalid choice.\n";
+        }
     }
 }
 

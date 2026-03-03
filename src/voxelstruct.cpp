@@ -23,7 +23,6 @@ void voxelstruct::insertPointCloud(
     if(!pcd||pcd->points_.empty()) return;
     
     this->pcd = pcd;
-    this->pcd_list.push_back(pcd);
 
     for (size_t i = 0; i < pcd->points_.size(); ++i) {
         const auto& p = pcd->points_[i];
@@ -202,4 +201,32 @@ void voxelstruct::showVoxelTree()
 double voxelstruct::getResolution() 
 {
     return this->resolution;
+}
+
+void voxelstruct::killVoxelStruct()
+{
+    surface_frontiers.clear();
+    occupied_voxels.clear();
+    roi_surface_frontier.clear();
+
+    // pcd is non-owned (points to something passed in)
+    pcd = nullptr;
+
+    if (tree) {
+        delete tree;
+        tree = nullptr;
+    }
+}
+
+bool voxelstruct::saveOctree(const std::string& path) const
+{
+    if (!tree) {
+        std::cout << "Octree not initialized.\n";
+        return false;
+    }
+    // ColorOcTree inherits OcTree; write() exists
+    bool ok = tree->write(path);
+    if (!ok) std::cout << "Failed to save octree to: " << path << "\n";
+    else std::cout << "Saved octree to: " << path << "\n";
+    return ok;
 }

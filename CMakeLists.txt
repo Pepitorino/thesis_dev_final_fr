@@ -40,6 +40,7 @@ add_definitions(${PCL_DEFINITIONS})
 set(SOURCES
     src/nbvtransform.cpp
     src/main.cpp
+    src/voxelstruct.cpp
 )
 
 # ----------------------

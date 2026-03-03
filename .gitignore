@@ -43,5 +43,6 @@
 build
 include/json.hpp
 pcds
-pcdtfs
+pcdstf
+pcdstf/*
 
