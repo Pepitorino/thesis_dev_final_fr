@@ -1,5 +1,7 @@
 #include "voxelstruct.hpp"
 #include <open3d/Open3D.h>
+#include <open3d/io/PointCloudIO.h>
+#include <open3d/geometry/PointCloud.h>
 #include <octomap/Pointcloud.h>
 #include <octomap/ColorOcTree.h>
 #include <octomap/octomap.h>
@@ -7,7 +9,7 @@
 #include <string>
 #include <unordered_set>
 #include <cstdint>
-
+#include <iostream>
 
 voxelstruct::voxelstruct(double resolution) 
 {

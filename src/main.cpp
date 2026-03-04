@@ -4,7 +4,16 @@
 #include <cmath>
 #include "voxelstruct.hpp"
 
-
+//random helper functions
+static bool saveVec3AsPLY(const std::string& path, const std::vector<Eigen::Vector3d>& pts) {
+    open3d::geometry::PointCloud cloud;
+    cloud.points_ = pts;              // copies points
+    // no colors needed for ellipsoid fitting; add if you want
+    bool ok = open3d::io::WritePointCloud(path, cloud);
+    if (!ok) std::cout << "Failed to save: " << path << "\n";
+    else     std::cout << "Saved: " << path << " (" << pts.size() << " pts)\n";
+    return ok;
+}
 
 static bool parseVec3(const std::string& s, Eigen::Vector3d& out) {
     std::string t = s;
@@ -99,6 +108,7 @@ static void printVoxelMenu()
               << "5) Print Surface Frontiers, Occupied, and ROI Surface Frontier voxels to file\n"
               << "6) Save octree\n"
               << "7) Show classified voxels (occ/frontier/roi)\n"
+              << "8) Save point cloud\n"
               << "0) Back\n";
 }
 
@@ -381,6 +391,26 @@ static void voxelstructMenu()
                 continue;
             }
             voxel_struct->showClassifiedVoxels();
+        }
+        else if (c == "8") {
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+
+            voxel_struct->classifyVoxels();
+
+            auto sf  = voxel_struct->getSurfaceFrontiers();
+            auto occ = voxel_struct->getOccupiedVoxels();
+            auto roi = voxel_struct->getROISurfaceFrontiers();
+
+            std::string base = prompt("Enter base filename (no extension): ");
+            if (base.empty()) base = "voxels";
+
+            // Save as 3 separate PLYs (easiest for ellipsoid module)
+            saveVec3AsPLY(base + "_occupied.ply", occ);
+            saveVec3AsPLY(base + "_frontier.ply", sf);
+            saveVec3AsPLY(base + "_roi_frontier.ply", roi);
         }
         else {
             std::cout << "Invalid choice.\n";

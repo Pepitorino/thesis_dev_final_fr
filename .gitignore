@@ -45,4 +45,6 @@ include/json.hpp
 pcds
 pcdstf
 pcdstf/*
+classified_points/*
+classified_points
 
