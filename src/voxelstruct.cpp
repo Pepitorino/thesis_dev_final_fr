@@ -230,3 +230,42 @@ bool voxelstruct::saveOctree(const std::string& path) const
     else std::cout << "Saved octree to: " << path << "\n";
     return ok;
 }
+
+void voxelstruct::showClassifiedVoxels()
+{
+    if (!tree) {
+        std::cout << "Octree not initialized.\n";
+        return;
+    }
+
+    // Make sure lists are up-to-date
+    this->classifyVoxels();
+
+    const auto sf  = this->surface_frontiers;
+    const auto occ = this->occupied_voxels;
+    const auto roi = this->roi_surface_frontier;
+
+    auto cloud = std::make_shared<open3d::geometry::PointCloud>();
+    cloud->points_.reserve(sf.size() + occ.size() + roi.size());
+    cloud->colors_.reserve(sf.size() + occ.size() + roi.size());
+
+    // Occupied (blue)
+    for (const auto& p : occ) {
+        cloud->points_.push_back(p);
+        cloud->colors_.push_back(Eigen::Vector3d(0.0, 0.0, 1.0));
+    }
+
+    // Surface frontiers (red)
+    for (const auto& p : sf) {
+        cloud->points_.push_back(p);
+        cloud->colors_.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
+    }
+
+    // ROI surface frontiers (green)
+    for (const auto& p : roi) {
+        cloud->points_.push_back(p);
+        cloud->colors_.push_back(Eigen::Vector3d(0.0, 1.0, 0.0));
+    }
+
+    open3d::visualization::DrawGeometries({cloud}, "Occupied (Blue), Frontier (Red), ROI (Green)");
+}

@@ -29,6 +29,7 @@ public:
     double getResolution();
 
     void showVoxelTree();
+    void showClassifiedVoxels(); 
 
     void killVoxelStruct();
     bool saveOctree(const std::string& path) const;

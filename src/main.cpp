@@ -76,7 +76,8 @@ static void printNBVMenu() {
               << "0) Back\n";
 }
 
-static void printTransformMenu() {
+static void printTransformMenu() 
+{
     std::cout << "\n--- TRANSFORMS ---\n"
               << "1) Load PCD\n"
               << "2) Translate to world frame\n"
@@ -88,7 +89,8 @@ static void printTransformMenu() {
               << "0) Back\n";
 }
 
-static void printVoxelMenu() {
+static void printVoxelMenu() 
+{
     std::cout << "\n--- VOXELSTRUCT ---\n"
               << "1) Initialize voxelstruct\n"
               << "2) Insert pointcloud\n"
@@ -96,6 +98,7 @@ static void printVoxelMenu() {
               << "4) Print voxels to file\n"
               << "5) Print Surface Frontiers, Occupied, and ROI Surface Frontier voxels to file\n"
               << "6) Save octree\n"
+              << "7) Show classified voxels (occ/frontier/roi)\n"
               << "0) Back\n";
 }
 
@@ -254,7 +257,8 @@ static void transformsMenu()
     }
 }
 
-static void voxelstructMenu() {
+static void voxelstructMenu() 
+{
     bool inMenu = true;
 
     voxelstruct* voxel_struct = nullptr;
@@ -370,6 +374,13 @@ static void voxelstructMenu() {
 
             std::string outPath = prompt("Enter octree output filename (e.g. map.bt): ");
             voxel_struct->saveOctree(outPath);
+        }
+        else if (c == "7") {
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+            voxel_struct->showClassifiedVoxels();
         }
         else {
             std::cout << "Invalid choice.\n";

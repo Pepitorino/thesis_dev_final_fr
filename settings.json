@@ -1,0 +1,42 @@
+{
+    "camera": {
+        "width": 640,
+        "height": 576,
+        "fx": 504.05474854,
+        "fy": 504.17108154,
+        "cx": 323.23455811,
+        "cy": 331.29833984,
+        "max_range": 3.86
+    },
+
+    "bounding_box": {
+        "bbx_min": [0.0,0.1,0.0],
+        "bbx_max": [2.0,1.2,2.0]
+    },
+
+    "plants_region": {
+        "plants": [
+            {
+                "min": { "x": 0.72, "y": 0, "z": 0.75 },
+                "max": { "x": 1.32, "y": 0.63, "z": 1.32 }
+            }
+        ]
+    },
+
+    "clustering": {
+        "min_clusters": 2,
+        "max_clusters": 50
+    },
+
+    "octomap": {
+        "resolution": 0.01
+    },
+
+    "xyzypgenf": {
+        "dx": 0.1,
+        "dy": 0.25,
+        "dz": 0.1,
+        "dyaw": 15,
+        "dpitch": 15
+    }
+}
