@@ -3,70 +3,14 @@
 #include "nbvtransform.hpp"
 #include <cmath>
 #include "voxelstruct.hpp"
-
-//random helper functions
-static bool saveVec3AsPLY(const std::string& path, const std::vector<Eigen::Vector3d>& pts) {
-    open3d::geometry::PointCloud cloud;
-    cloud.points_ = pts;              // copies points
-    // no colors needed for ellipsoid fitting; add if you want
-    bool ok = open3d::io::WritePointCloud(path, cloud);
-    if (!ok) std::cout << "Failed to save: " << path << "\n";
-    else     std::cout << "Saved: " << path << " (" << pts.size() << " pts)\n";
-    return ok;
-}
-
-static bool parseVec3(const std::string& s, Eigen::Vector3d& out) {
-    std::string t = s;
-    for (char& ch : t) if (ch == ',') ch = ' ';
-    std::istringstream iss(t);
-
-    double a, b, c;
-    if (!(iss >> a >> b >> c)) return false;
-    out = Eigen::Vector3d(a, b, c);
-    return true;
-}
-
-static bool writeVec3ListToFile(
-    const std::string& path,
-    const std::vector<Eigen::Vector3d>& pts,
-    const std::string& header)
-{
-    std::ofstream out(path);
-    if (!out.is_open()) {
-        std::cout << "Failed to open file: " << path << "\n";
-        return false;
-    }
-    out << header << "\n";
-    for (size_t i = 0; i < pts.size(); ++i) {
-        out << i << " " << pts[i].x() << " " << pts[i].y() << " " << pts[i].z() << "\n";
-    }
-    std::cout << "Wrote " << pts.size() << " points to " << path << "\n";
-    return true;
-}
-
-static std::string prompt(const std::string& msg) {
-    std::cout << msg;
-    std::string s;
-    std::getline(std::cin, s);
-    return s;
-}
-
-static bool parseViewpoint6(const std::string& s, Eigen::Matrix<double,6,1>& out) {
-    std::string t = s;
-    for (char& ch : t) {
-        if (ch == ',') ch = ' ';
-    }
-    std::istringstream iss(t);
-    double v[6];
-    for (int i = 0; i < 6; ++i) {
-        if (!(iss >> v[i])) return false;
-    }
-    v[3] = v[3] * std::acos(-1.0) / 180.0;
-    v[4] = v[4] * std::acos(-1.0) / 180.0;
-    v[5] = v[5] * std::acos(-1.0) / 180.0;
-    out << v[0], v[1], v[2], v[3], v[4], v[5];
-    return true;
-}
+#include <open3d/Open3D.h>
+#include <Eigen/Dense>
+#include <vector>
+#include <memory>
+#include <algorithm>
+#include "ellipsoid.hpp"
+#include "utils.hpp"
+#include "nbvstrategy.hpp"
 
 // ---------- Menus ----------
 static void printMainMenu() {
@@ -80,8 +24,13 @@ static void printMainMenu() {
 
 static void printNBVMenu() {
     std::cout << "\n--- NEXT BEST VIEW ---\n"
-              << "1) Option 1\n"
-              << "2) Option 2\n"
+              << "1) Initialize\n"
+              << "2) Generate Viewpoints\n"
+              << "3) Insert Transformed Pointcloud to Voxelstruct\n" //need to initialize and generate viewpoints first
+              << "4) Get NBV\n" //need to initialize and generate viewpoints first
+              << "5) Show last NBV score and position\n" //show position, score, and the visualizer to show where it is
+              << "6) Show last NBV image\n" //show opencv "image"
+              << "7) Save NBV\n" //Saves the position, score, visualizer, and image
               << "0) Back\n";
 }
 
@@ -114,19 +63,29 @@ static void printVoxelMenu()
 
 static void printEllipsoidMenu() {
     std::cout << "\n--- ELLIPSOID FITTING ---\n"
-              << "1) Option 1\n"
-              << "2) Option 2\n"
+              << "1) Load PCDs (Occupied, Frontier, ROI Frontier)\n"
+              << "2) GMM Clustering\n"
+              << "3) Fit Ellipsoids\n"
+              << "4) Clusters Visualization\n"
+              << "5) Ellipsoid Visualization\n"
+              << "6) Save Cluster Viz\n"
+              << "7) Save Ellipsoid Viz\n"
               << "0) Back\n";
 }
 
 // ---------- Submenu loops ----------
 static void nextBestViewMenu() {
     bool inMenu = true;
+    nbvstrategy nbv;
+
     while (inMenu) {
         printNBVMenu();
         std::string c = prompt("Choice: ");
 
-        if (c == "0") inMenu = false;
+        if (c == "0") {
+            nbv.kill();
+            inMenu = false;
+        }
         else if (c == "1") { /* TODO */ }
         else if (c == "2") { /* TODO */ }
         else std::cout << "Invalid choice.\n";
@@ -420,14 +379,155 @@ static void voxelstructMenu()
 
 static void ellipsoidFittingMenu() {
     bool inMenu = true;
+
+    // --- State that persists while you're in this menu ---
+    bool loaded = false;
+    bool clustered = false;
+    bool fitted = false;
+
+    std::vector<Eigen::Vector3d> occ_pts, frontier_pts, roi_pts;
+
+    std::vector<std::vector<Eigen::Vector3d>> occ_clusters, frontier_clusters, roi_clusters;
+    std::vector<EllipsoidParam> ellipsoids;
+
+    // default clustering params (you can prompt these)
+    int min_k = 2;
+    int max_k = 6;
+
+    // your ellipsoid object
+    ellipsoid ell(min_k, max_k);
+
     while (inMenu) {
         printEllipsoidMenu();
         std::string c = prompt("Choice: ");
 
-        if (c == "0") inMenu = false;
-        else if (c == "1") { /* TODO */ }
-        else if (c == "2") { /* TODO */ }
-        else std::cout << "Invalid choice.\n";
+        if (c == "0") {
+            inMenu = false;
+        }
+        else if (c == "1") {
+            // Load PCDs (Occupied, Frontier, ROI Frontier)
+            std::string occ_path = prompt("Enter Occupied PLY/PCD path: ");
+            std::string fr_path  = prompt("Enter Frontier PLY/PCD path: ");
+            std::string roi_path = prompt("Enter ROI Frontier PLY/PCD path: ");
+
+            bool ok1 = loadCloudAsVec3(occ_path, occ_pts);
+            bool ok2 = loadCloudAsVec3(fr_path, frontier_pts);
+            bool ok3 = loadCloudAsVec3(roi_path, roi_pts);
+
+            loaded = ok1 && ok2 && ok3;
+            clustered = false;
+            fitted = false;
+
+            if (!loaded) std::cout << "Load failed (one or more files).\n";
+            else std::cout << "All 3 point sets loaded.\n";
+        }
+        else if (c == "2") {
+            // GMM Clustering
+            if (!loaded) { std::cout << "Load PCDs first.\n"; continue; }
+
+            std::string smin = prompt("min_clusters (default 2): ");
+            std::string smax = prompt("max_clusters (default 6): ");
+
+            if (!smin.empty()) min_k = std::max(1, std::stoi(smin));
+            if (!smax.empty()) max_k = std::max(min_k, std::stoi(smax));
+
+            ell = ellipsoid(min_k, max_k);
+
+            std::cout << "Clustering frontier...\n";
+            frontier_clusters = ell.gmm_clustering(frontier_pts);
+
+            std::cout << "Clustering occupied...\n";
+            occ_clusters = ell.gmm_clustering(occ_pts);
+
+            std::cout << "Clustering ROI frontier...\n";
+            roi_clusters = ell.gmm_clustering(roi_pts);
+
+            clustered = true;
+            fitted = false;
+
+            std::cout << "Clustering done.\n";
+            std::cout << "frontier_clusters=" << frontier_clusters.size()
+                      << " occ_clusters=" << occ_clusters.size()
+                      << " roi_clusters=" << roi_clusters.size() << "\n";
+        }
+        else if (c == "3") {
+            // Fit Ellipsoids
+            if (!clustered) { std::cout << "Run clustering first.\n"; continue; }
+
+            ellipsoids = ell.ellipsoidize_clusters_CGAL(frontier_clusters, occ_clusters, roi_clusters);
+            fitted = !ellipsoids.empty();
+
+            std::cout << "Ellipsoid fitting done. Count=" << ellipsoids.size() << "\n";
+        }
+        else if (c == "4") {
+            // Clusters Visualization
+            if (!clustered) { std::cout << "Run clustering first.\n"; continue; }
+
+            std::string vs = prompt("VoxelDownSample size (0 to disable): ");
+            double voxel_size = 0.0;
+            if (!vs.empty()) voxel_size = std::stod(vs);
+
+            // Use your existing function
+            ell.showAllClustersColored(frontier_clusters, occ_clusters, roi_clusters, voxel_size);
+        }
+        else if (c == "5") {
+            // Ellipsoid Visualization
+            if (!fitted) { std::cout << "Fit ellipsoids first.\n"; continue; }
+
+            std::string wf = prompt("Wireframe? (1=yes, 0=no) [default 1]: ");
+            std::string rs = prompt("Sphere resolution [default 20]: ");
+
+            bool wireframe = true;
+            int sphere_res = 20;
+            if (!wf.empty()) wireframe = (wf != "0");
+            if (!rs.empty()) sphere_res = std::max(4, std::stoi(rs));
+
+            ell.showEllipsoidsOpen3D(ellipsoids, wireframe, sphere_res);
+        }
+        else if (c == "6") {
+            // Save Cluster Viz (PNG)
+            if (!clustered) { std::cout << "Run clustering first.\n"; continue; }
+
+            std::string png = prompt("Output PNG filename (e.g. clusters.png): ");
+            if (png.empty()) { std::cout << "No filename given.\n"; continue; }
+
+            std::string vs = prompt("VoxelDownSample size (0 to disable): ");
+            double voxel_size = 0.0;
+            if (!vs.empty()) voxel_size = std::stod(vs);
+
+            // frontier red, roi green, occupied blue
+            auto f = buildCloudFromClusters(frontier_clusters, Eigen::Vector3d(1,0,0), voxel_size);
+            auto r = buildCloudFromClusters(roi_clusters,      Eigen::Vector3d(0,1,0), voxel_size);
+            auto o = buildCloudFromClusters(occ_clusters,      Eigen::Vector3d(0,0,1), voxel_size);
+
+            std::vector<std::shared_ptr<const open3d::geometry::Geometry>> geoms;
+            if (!o->points_.empty()) geoms.push_back(o);
+            if (!f->points_.empty()) geoms.push_back(f);
+            if (!r->points_.empty()) geoms.push_back(r);
+
+            saveGeomsScreenshot(geoms, png, "Clusters Viz");
+        }
+        else if (c == "7") {
+            // Save Ellipsoid Viz (PNG)
+            if (!fitted) { std::cout << "Fit ellipsoids first.\n"; continue; }
+
+            std::string png = prompt("Output PNG filename (e.g. ellipsoids.png): ");
+            if (png.empty()) { std::cout << "No filename given.\n"; continue; }
+
+            std::string wf = prompt("Wireframe? (1=yes, 0=no) [default 1]: ");
+            std::string rs = prompt("Sphere resolution [default 20]: ");
+
+            bool wireframe = true;
+            int sphere_res = 20;
+            if (!wf.empty()) wireframe = (wf != "0");
+            if (!rs.empty()) sphere_res = std::max(4, std::stoi(rs));
+
+            auto geoms = buildEllipsoidGeoms(ellipsoids, wireframe, sphere_res);
+            saveGeomsScreenshot(geoms, png, "Ellipsoids Viz");
+        }
+        else {
+            std::cout << "Invalid choice.\n";
+        }
     }
 }
 

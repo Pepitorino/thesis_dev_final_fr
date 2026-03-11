@@ -48,7 +48,7 @@ Eigen::Matrix4d nbvtransform::getCameraPose(
                             vp(3),Eigen::Vector3d::UnitY())
                             .toRotationMatrix();
     Eigen::Matrix3d R_pitch = Eigen::AngleAxisd(
-                            vp(4), Eigen::Vector3d::UnitX())
+                            -vp(4), Eigen::Vector3d::UnitX())
                             .toRotationMatrix();
     Eigen::Matrix3d R_roll = Eigen::AngleAxisd(
                             vp(5), Eigen::Vector3d::UnitZ())

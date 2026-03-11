@@ -59,8 +59,8 @@ std::vector<std::vector<Eigen::Vector3d>> ellipsoid::gmm_clustering(
             }
             
             cv::Ptr<cv::ml::EM> em_model = cv::ml::EM::create();
-            em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_SPHERICAL);
-            em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_SPHERICAL);
+            em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_DIAGONAL);
+            em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_DIAGONAL);
             em_model->setClustersNumber(i); // 高斯混合模型的数量
             em_model->trainEM(samples);
 
@@ -128,9 +128,9 @@ std::vector<std::vector<Eigen::Vector3d>> ellipsoid::gmm_clustering(
     else if (samples.rows > 3)
     {
         printf("clustering!\n");
-        int cluster_num = samples.rows/2;
+        int cluster_num = 2;
         cv::Ptr<cv::ml::EM> em_model = cv::ml::EM::create();
-        em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_SPHERICAL);
+        em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_DIAGONAL);
         em_model->setClustersNumber(cluster_num); // 高斯混合模型的数量
         clustered_clouds.resize(cluster_num);
         em_model->trainEM(samples);

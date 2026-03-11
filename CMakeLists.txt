@@ -41,6 +41,9 @@ set(SOURCES
     src/nbvtransform.cpp
     src/main.cpp
     src/voxelstruct.cpp
+    src/ellipsoid.cpp
+    src/utils.cpp
+    src/nbvstrategy.cpp
 )
 
 # ----------------------
