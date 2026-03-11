@@ -37,8 +37,8 @@ public:
 private:
     double resolution;
     
-    octomap::ColorOcTree* tree;
-    open3d::geometry::PointCloud* pcd;
+    octomap::ColorOcTree* tree = nullptr;
+    open3d::geometry::PointCloud* pcd = nullptr;
 
     std::vector<Eigen::Vector3d> surface_frontiers;
     std::vector<Eigen::Vector3d> occupied_voxels;

@@ -43,3 +43,4 @@
 build
 include/json.hpp
 point_clouds/
+nbv_raw/

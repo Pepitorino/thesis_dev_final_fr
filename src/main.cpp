@@ -78,6 +78,10 @@ static void nextBestViewMenu() {
     bool inMenu = true;
     nbvstrategy nbv;
 
+    bool initialized = false;
+    bool viewpoints_generated = false;
+    bool cloud_inserted = false;
+
     while (inMenu) {
         printNBVMenu();
         std::string c = prompt("Choice: ");
@@ -86,9 +90,102 @@ static void nextBestViewMenu() {
             nbv.kill();
             inMenu = false;
         }
-        else if (c == "1") { /* TODO */ }
-        else if (c == "2") { /* TODO */ }
-        else std::cout << "Invalid choice.\n";
+        else if (c == "1") {
+            std::string settings_path = prompt("Enter settings JSON path: ");
+            int ok = nbv.initialize(settings_path);
+
+            if (ok < 0) {
+                std::cout << "Failed to initialize NBV.\n";
+                initialized = false;
+            } else {
+                initialized = true;
+                std::cout << "NBV initialized.\n";
+            }
+        }
+        else if (c == "2") {
+            if (!initialized) {
+                std::cout << "Initialize first.\n";
+                continue;
+            }
+
+            nbv.generateViewpoints();
+            viewpoints_generated = true;
+            std::cout << "Viewpoints generated.\n";
+        }
+        else if (c == "3") {
+            if (!initialized) {
+                std::cout << "Initialize first.\n";
+                continue;
+            }
+
+            std::string ply_path = prompt("Enter transformed point cloud path: ");
+            std::string vp_str = prompt("Enter camera position x,y,z: ");
+
+            Eigen::Vector3d vp;
+            if (!parseVec3(vp_str, vp)) {
+                std::cout << "Invalid camera position.\n";
+                continue;
+            }
+
+            nbv.insertTransformedCloud(ply_path, vp);
+            cloud_inserted = true;
+            std::cout << "Point cloud inserted.\n";
+        }
+        else if (c == "4") {
+            if (!initialized) {
+                std::cout << "Initialize first.\n";
+                continue;
+            }
+            if (!viewpoints_generated) {
+                std::cout << "Generate viewpoints first.\n";
+                continue;
+            }
+            if (!cloud_inserted) {
+                std::cout << "Insert a transformed point cloud first.\n";
+                continue;
+            }
+
+            nbv.getNBV();
+            std::cout << "NBV computation complete.\n";
+        }
+        else if (c == "5") {
+            nbv.showLastNBVInfo();
+            nbv.showLastNBVInVoxelTree();
+        }
+        else if (c == "6") {
+            if (!nbv.hasBestNBV() || nbv.best_image.empty()) {
+                std::cout << "No NBV image available yet.\n";
+                continue;
+            }
+
+            cv::imshow("Last NBV Image", nbv.best_image);
+            while (true) {
+                int key = cv::waitKey(30);
+                if (key >= 0) break; // any key pressed
+
+                // window closed by user
+                if (cv::getWindowProperty(win, cv::WND_PROP_VISIBLE) < 1) {
+                    break;
+                }
+            }
+        }
+        else if (c == "7") {
+            if (!nbv.hasBestNBV()) {
+                std::cout << "No NBV available yet.\n";
+                continue;
+            }
+
+            std::string txt_path = prompt("Enter output text path (e.g. nbv.txt): ");
+            std::string img_path = prompt("Enter output image path (e.g. nbv.jpg): ");
+
+            if (txt_path.empty()) txt_path = "nbv.txt";
+            if (img_path.empty()) img_path = "nbv.jpg";
+
+            nbv.saveLastNBV(txt_path, img_path);
+        }
+        else {
+            std::cout << "Invalid choice.\n";
+        }
     }
 }
 

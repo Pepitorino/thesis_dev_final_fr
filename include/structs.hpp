@@ -15,7 +15,7 @@ struct Camera {
     double fy = 1000.0;
     double cx = width / 2.0;
     double cy = height / 2.0;
-    double min_range = 0;
+    double min_range = 0.25;
     double max_range = 3.8; // meters
 };
 

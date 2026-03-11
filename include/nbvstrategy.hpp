@@ -33,6 +33,12 @@ public:
         double rx, double ry, double rz,
         const Eigen::Matrix3d &R_e_cam,
         const Camera &cam);
+
+    //more viz stuff (chatgpt)
+    bool hasBestNBV() const;
+    void showLastNBVInfo() const;
+    void showLastNBVInVoxelTree();
+    bool saveLastNBV(const std::string& txt_path, const std::string& img_path) const;
     
     //NEXT BEST VIEW
     double best_score;

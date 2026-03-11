@@ -192,16 +192,30 @@ void voxelstruct::showVoxelTree()
 
     auto cloud = std::make_shared<open3d::geometry::PointCloud>();
     cloud->points_.reserve(tree->size());
+    cloud->colors_.reserve(tree->size());
 
     for (auto it = tree->begin(), end = tree->end(); it != end; ++it) {
         if (tree->isNodeOccupied(*it)) {
             auto c = it.getCoordinate();
             cloud->points_.push_back(Eigen::Vector3d(c.x(), c.y(), c.z()));
+
+            auto col = it->getColor();
+            Eigen::Vector3d color(
+                double(col.r) / 255.0,
+                double(col.g) / 255.0,
+                double(col.b) / 255.0
+            );
+
+            // fallback if node color is black/unset
+            if (color.norm() < 1e-9) {
+                color = Eigen::Vector3d(0.0, 0.0, 1.0);
+            }
+
+            cloud->colors_.push_back(color);
         }
     }
 
-    cloud->PaintUniformColor(Eigen::Vector3d(0, 0, 1)); // blue or whatever
-    open3d::visualization::DrawGeometries({cloud}, "Occupied Voxels (points)");
+    open3d::visualization::DrawGeometries({cloud}, "Occupied Voxels (colored)");
 }
 
 double voxelstruct::getResolution() 

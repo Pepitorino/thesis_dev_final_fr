@@ -150,6 +150,8 @@ void nbvstrategy::generateViewpoints()
     double roll = 0.0;
 
     size_t total = nx*ny*nz*nyaw*npitch+5;
+    this->viewpoints.clear();
+    this->viewpoints.reserve(total);
 
     #pragma omp parallel
     {
@@ -174,16 +176,19 @@ void nbvstrategy::generateViewpoints()
         }
 
         #pragma omp critical
-        this->viewpoints.clear();
-        this->viewpoints.reserve(total);
         this->viewpoints.insert(this->viewpoints.end(), local_views.begin(), local_views.end());
     }
+
+    std::cout << "Viewpoints Generated!" << std::endl;
+    std::cout << "Number of viewpoints: " << this->viewpoints.size() << std::endl;
+    std::cout << "First viewpoint: " << this->viewpoints.front().transpose() << std::endl;
+    std::cout << "Last viewpoint: " << this->viewpoints.back(). transpose() << std::endl;
 }
 
 void nbvstrategy::kill() 
 {
-    this->voxel_struct->killVoxelStruct();
     if (voxel_struct) {
+        this->voxel_struct->killVoxelStruct();
         delete voxel_struct;
         voxel_struct = nullptr;
     }
@@ -196,7 +201,8 @@ void nbvstrategy::kill()
 void nbvstrategy::insertTransformedCloud(std::string file_path, 
     Eigen::Vector3d vp)
 {
-    open3d::geometry::PointCloud* pcd = new open3d::geometry::PointCloud();
+    open3d::geometry::PointCloud* pcd = nullptr;
+    pcd = new open3d::geometry::PointCloud();
     bool ok = open3d::io::ReadPointCloud(file_path,*pcd);
     if (!ok) {
         std::cout << "Failed to load point cloud: " << file_path << "\n";
@@ -540,4 +546,96 @@ void nbvstrategy::getNBV()
     //Display the best viewpoint image
     // cv::imshow("Best Viewpoint", best_image);
     cv::imwrite("best_viewpoint.png", best_image);
+}
+
+bool nbvstrategy::hasBestNBV() const
+{
+    return (this->best_score > 0.0 || !this->best_image.empty());
+}
+
+void nbvstrategy::showLastNBVInfo() const
+{
+    if (!hasBestNBV()) {
+        std::cout << "No NBV has been computed yet.\n";
+        return;
+    }
+
+    std::cout << "\n--- LAST NBV ---\n";
+    std::cout << "Score: " << this->best_score << "\n";
+    std::cout << "Viewpoint (x,y,z,pitch,yaw,roll): "
+              << this->best_viewpoint.transpose() << "\n";
+    std::cout << "Index: " << this->best_viewpoint_index << "\n";
+}
+
+bool nbvstrategy::saveLastNBV(const std::string& txt_path, const std::string& img_path) const
+{
+    if (!hasBestNBV()) {
+        std::cout << "No NBV has been computed yet.\n";
+        return false;
+    }
+
+    std::ofstream out(txt_path);
+    if (!out.is_open()) {
+        std::cout << "Failed to open text output file: " << txt_path << "\n";
+        return false;
+    }
+
+    out << "best_score: " << this->best_score << "\n";
+    out << "best_viewpoint_index: " << this->best_viewpoint_index << "\n";
+    out << "best_viewpoint_x_y_z_pitch_yaw_roll: "
+        << this->best_viewpoint.transpose() << "\n";
+    out.close();
+
+    bool ok_img = false;
+    if (!this->best_image.empty()) {
+        ok_img = cv::imwrite(img_path, this->best_image);
+    }
+
+    if (!ok_img) {
+        std::cout << "Failed to save NBV image: " << img_path << "\n";
+        return false;
+    }
+
+    std::cout << "Saved NBV text to: " << txt_path << "\n";
+    std::cout << "Saved NBV image to: " << img_path << "\n";
+    return true;
+}
+
+void nbvstrategy::showLastNBVInVoxelTree()
+{
+    if (!hasBestNBV()) {
+        std::cout << "No NBV has been computed yet.\n";
+        return;
+    }
+    if (!this->voxel_struct) {
+        std::cout << "Voxel structure not initialized.\n";
+        return;
+    }
+
+    // Make sure occupied voxels exist
+    this->voxel_struct->classifyVoxels();
+    std::vector<Eigen::Vector3d> occ = this->voxel_struct->getOccupiedVoxels();
+
+    voxelstruct temp_vs(this->resolution);
+
+    // 1) Insert occupied voxels as blue
+    auto occ_cloud = new open3d::geometry::PointCloud();
+    occ_cloud->points_ = occ;
+    occ_cloud->colors_.resize(occ.size(), Eigen::Vector3d(0.0, 0.0, 1.0));
+
+    // camera origin for ray insertion; any fixed point is fine for this temp viz
+    Eigen::Vector3d fake_cam(0.0, 0.0, 0.0);
+    temp_vs.insertPointCloud(occ_cloud, fake_cam);
+
+    // 2) Insert best viewpoint position as red
+    auto nbv_cloud = new open3d::geometry::PointCloud();
+    nbv_cloud->points_.push_back(this->best_viewpoint.block<3,1>(0,0));
+    nbv_cloud->colors_.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
+
+    // offset the fake camera slightly so the ray endpoint is valid
+    Eigen::Vector3d nbv_cam = this->best_viewpoint.block<3,1>(0,0) + Eigen::Vector3d(this->resolution, 0, 0);
+    temp_vs.insertPointCloud(nbv_cloud, nbv_cam);
+
+    temp_vs.showVoxelTree();
+    temp_vs.killVoxelStruct();
 }
