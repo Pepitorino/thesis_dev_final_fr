@@ -24,6 +24,10 @@ void voxelstruct::insertPointCloud(
 {
     if(!pcd||pcd->points_.empty()) return;
     
+    if(this->pcd) {
+        delete this->pcd;
+        this->pcd = nullptr;
+    }
     this->pcd = pcd;
 
     for (size_t i = 0; i < pcd->points_.size(); ++i) {
@@ -211,8 +215,10 @@ void voxelstruct::killVoxelStruct()
     occupied_voxels.clear();
     roi_surface_frontier.clear();
 
-    // pcd is non-owned (points to something passed in)
-    pcd = nullptr;
+    if (pcd) {
+        delete pcd;
+        pcd = nullptr;
+    }
 
     if (tree) {
         delete tree;

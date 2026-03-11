@@ -44,6 +44,7 @@ set(SOURCES
     src/ellipsoid.cpp
     src/utils.cpp
     src/nbvstrategy.cpp
+    cuda/cuda_projection.cu
 )
 
 # ----------------------

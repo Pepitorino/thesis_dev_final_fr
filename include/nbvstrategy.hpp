@@ -21,6 +21,18 @@ public:
 
     //getNBVs
     void getNBV();
+    std::pair<double, cv::Mat> projectEllipsoidstoImage(
+        const std::vector<EllipsoidParam> &ellipsoids,
+        const Eigen::Matrix4d &T_cam_world);
+    Eigen::Matrix3d compute_ellipsoid_projection(
+        const Eigen::Matrix<double, 3, 4>& camera_matrix,
+        const Eigen::Matrix4d& ellipsoid_matrix_dual);
+    Eigen::Matrix4d create_ellipsoid_dual_matrix(const EllipsoidParam &param);
+    bool SphereInFrustum(
+        const Eigen::Vector3d &center_cam,
+        double rx, double ry, double rz,
+        const Eigen::Matrix3d &R_e_cam,
+        const Camera &cam);
     
     //NEXT BEST VIEW
     double best_score;
