@@ -158,7 +158,8 @@ static void nextBestViewMenu() {
                 continue;
             }
 
-            cv::imshow("Last NBV Image", nbv.best_image);
+            const std::string win = "Last NBV Image";
+            cv::imshow(win, nbv.best_image);
             while (true) {
                 int key = cv::waitKey(30);
                 if (key >= 0) break; // any key pressed

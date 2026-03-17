@@ -121,6 +121,13 @@ int nbvstrategy::initialize(std::string settings_path)
     this->dyaw = M_PI/dyaw;
     this->dpitch = M_PI/dpitch;
 
+    //CYLINDER
+    double r = getOrDefault(cylinder, "r", 0.5);
+    double dc = getOrDefault(cylinder "dc", 0.5);
+    
+    this->r = r;
+    this->dc = M_PI/dc;
+
     this->voxel_struct = new voxelstruct(this->resolution);
     this->ellipsoid_fitting = new ellipsoid(this->min_clusters, this->max_clusters);
 
@@ -183,6 +190,79 @@ void nbvstrategy::generateViewpoints()
     std::cout << "Number of viewpoints: " << this->viewpoints.size() << std::endl;
     std::cout << "First viewpoint: " << this->viewpoints.front().transpose() << std::endl;
     std::cout << "Last viewpoint: " << this->viewpoints.back(). transpose() << std::endl;
+}
+
+void nbvstrategy::generateCylindricalViewpoints() 
+{
+    auto isInsideAnyPlantBBX = [this](double x, double y, double z) -> bool
+    {
+        for (const auto& bbx : this->bbx_plants) {
+            if (x >= bbx.min(0) && x <= bbx.max(0) &&
+                y >= bbx.min(1) && y <= bbx.max(1) &&
+                z >= bbx.min(2) && z <= bbx.max(2))
+                return true;
+        }
+        return false;
+    };
+
+    
+    double xc = 0.5 * (this->bbx_min[0] + this->bbx_max[0]);
+    double zc = 0.5 * (this->bbx_min[2] + this->bbx_max[2]);
+
+    size_t ny = (0.92 - 0.45) / this->dy;
+    size_t ntheta = (2 * M_PI) / this->dc;
+
+    size_t nyaw = (M_PI) / this->dyaw;
+    size_t npitch = (M_PI) / this->dpitch;
+
+    double roll = 0.0;
+
+    size_t total = ny * ntheta * nyaw * npitch + 5;
+
+    this->viewpoints.clear();
+    this->viewpoints.reserve(total);
+
+    #pragma omp parallel
+    {
+        std::vector<Eigen::Matrix<double, 6, 1>> local_views;
+
+        #pragma omp for nowait
+        for (size_t itheta = 0; itheta < ntheta; ++itheta) {
+            double theta = -M_PI + itheta * dc;
+
+            double x = xc + this->r * cos(theta);
+            double z = zc + this->r * sin(theta);
+
+            for (double y = 0.45; y <= 0.92; y += this->dy) {
+
+                if (isInsideAnyPlantBBX(x,y,z)) continue;
+
+                // Make camera look toward center (important difference)
+                double yaw_center = atan2(zc - z, xc - x);
+
+                for (double pitch = -M_PI/6; pitch < M_PI/6; pitch += this->dpitch) {
+                    for (double yaw_offset = -M_PI/6; yaw_offset < M_PI/6; yaw_offset += this->dyaw) {
+
+                        Eigen::Matrix<double,6,1> vp;
+                        vp << x, y, z,
+                              pitch,
+                              yaw_center + yaw_offset,
+                              roll;
+
+                        local_views.push_back(vp);
+                    }
+                }
+            }
+        }
+
+        #pragma omp critical
+        this->viewpoints.insert(this->viewpoints.end(), local_views.begin(), local_views.end());
+    }
+
+    std::cout << "Cylindrical Viewpoints Generated!" << std::endl;
+    std::cout << "Number of viewpoints: " << this->viewpoints.size() << std::endl;
+    std::cout << "First viewpoint: " << this->viewpoints.front().transpose() << std::endl;
+    std::cout << "Last viewpoint: " << this->viewpoints.back().transpose() << std::endl;
 }
 
 void nbvstrategy::kill() 

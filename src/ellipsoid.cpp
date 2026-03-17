@@ -60,7 +60,7 @@ std::vector<std::vector<Eigen::Vector3d>> ellipsoid::gmm_clustering(
             
             cv::Ptr<cv::ml::EM> em_model = cv::ml::EM::create();
             em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_DIAGONAL);
-            em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_DIAGONAL);
+            // em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_SPHERICAL);
             em_model->setClustersNumber(i); // 高斯混合模型的数量
             em_model->trainEM(samples);
 
@@ -168,6 +168,74 @@ std::vector<std::vector<Eigen::Vector3d>> ellipsoid::gmm_clustering(
     return clustered_clouds;
 }
 
+static EllipsoidParam makeFallbackEllipsoid(
+    const std::vector<Eigen::Vector3d>& cluster,
+    const std::string& type,
+    double min_radius = 0.005)
+{
+    min_radius = 0.05;
+    EllipsoidParam e;
+    e.pose = Eigen::Matrix4d::Identity();
+    e.type = type;
+
+    if (cluster.empty()) {
+        e.radii = Eigen::Vector3d(min_radius, min_radius, min_radius);
+        return e;
+    }
+
+    // centroid
+    Eigen::Vector3d mean = Eigen::Vector3d::Zero();
+    for (const auto& p : cluster) mean += p;
+    mean /= static_cast<double>(cluster.size());
+
+    // covariance
+    Eigen::Matrix3d cov = Eigen::Matrix3d::Zero();
+    for (const auto& p : cluster) {
+        Eigen::Vector3d d = p - mean;
+        cov += d * d.transpose();
+    }
+
+    if (cluster.size() > 1)
+        cov /= static_cast<double>(cluster.size() - 1);
+
+    // PCA
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
+    if (solver.info() != Eigen::Success) {
+        e.pose.block<3,1>(0,3) = mean;
+        e.radii = Eigen::Vector3d(min_radius, min_radius, min_radius);
+        return e;
+    }
+
+    // Eigen gives ascending eigenvalues
+    Eigen::Vector3d evals = solver.eigenvalues();
+    Eigen::Matrix3d evecs = solver.eigenvectors();
+
+    // Reorder so largest axis comes first
+    std::array<int,3> order = {2,1,0};
+    Eigen::Matrix3d R;
+    Eigen::Vector3d radii;
+
+    for (int j = 0; j < 3; ++j) {
+        int idx = order[j];
+        R.col(j) = evecs.col(idx);
+
+        // stddev-like radius estimate, clamped
+        double r = std::sqrt(std::max(0.0, evals(idx)));
+        radii(j) = std::max(min_radius, r);
+    }
+
+    // Make rotation right-handed
+    if (R.determinant() < 0.0) {
+        R.col(2) *= -1.0;
+    }
+
+    e.pose.block<3,1>(0,3) = mean;
+    e.pose.block<3,3>(0,0) = R;
+    e.radii = radii;
+
+    return e;
+}
+
 std::vector<EllipsoidParam> ellipsoid::ellipsoidize_clusters_CGAL(
     const std::vector<std::vector<Eigen::Vector3d>> frontier_clusters,
     const std::vector<std::vector<Eigen::Vector3d>> occupied_clusters,
@@ -203,29 +271,48 @@ std::vector<EllipsoidParam> ellipsoid::ellipsoidize_clusters_CGAL(
                 points.push_back(Point(3, vec.begin(), vec.end()));
             }
 
-            AME mel(eps, points.begin(), points.end(), traits);
-            if (!mel.is_full_dimensional()) continue;
-
             EllipsoidParam e;
-            auto radii = mel.axes_lengths_begin();
-            auto centroid = mel.center_cartesian_begin();
-            auto d0 = mel.axis_direction_cartesian_begin(0);
-            auto d1 = mel.axis_direction_cartesian_begin(1);
-            auto d2 = mel.axis_direction_cartesian_begin(2);
 
-            e.pose = Eigen::Matrix4d::Identity();
-            e.pose.block<3,1>(0,3) = Eigen::Vector3d(centroid[0], centroid[1], centroid[2]);
-            e.pose.block<3,3>(0,0) = (Eigen::Matrix3d() <<
-                d0[0], d1[0], d2[0],
-                d0[1], d1[1], d2[1],
-                d0[2], d1[2], d2[2]).finished();
-            e.radii = Eigen::Vector3d(radii[0], radii[1], radii[2]);
-            e.type = "frontier";
+            if (frontier_clusters[i].size() < 4) {
+                e = makeFallbackEllipsoid(frontier_clusters[i], "frontier", 0.005);
+            } else {
+                AME mel(eps, points.begin(), points.end(), traits);
+
+                if (!mel.is_full_dimensional()) {
+                    e = makeFallbackEllipsoid(frontier_clusters[i], "frontier", 0.005);
+                } else {
+                    auto radii = mel.axes_lengths_begin();
+                    auto centroid = mel.center_cartesian_begin();
+                    auto d0 = mel.axis_direction_cartesian_begin(0);
+                    auto d1 = mel.axis_direction_cartesian_begin(1);
+                    auto d2 = mel.axis_direction_cartesian_begin(2);
+
+                    e.pose = Eigen::Matrix4d::Identity();
+                    e.pose.block<3,1>(0,3) = Eigen::Vector3d(centroid[0], centroid[1], centroid[2]);
+                    e.pose.block<3,3>(0,0) = (Eigen::Matrix3d() <<
+                        d0[0], d1[0], d2[0],
+                        d0[1], d1[1], d2[1],
+                        d0[2], d1[2], d2[2]).finished();
+
+                    if (e.pose.block<3,3>(0,0).determinant() < 0.0) {
+                        e.pose.block<3,1>(0,2) *= -1.0;
+                    }
+
+                    e.radii = Eigen::Vector3d(
+                        std::max(0.005, radii[0]),
+                        std::max(0.005, radii[1]),
+                        std::max(0.005, radii[2])
+                    );
+                    e.type = "frontier";
+                }
+            }
 
             #pragma omp critical
             ellipsoid_vec.push_back(e);
         }
-        std::cout << "Frontier ellipsoids computed: " << frontier_clusters.size() << std::endl;
+
+        std::cout << "Frontier ellipsoids computed: "
+                << frontier_clusters.size() << std::endl;
     }
 
     std::cout << "Total ellipsoids after frontier computed: " << ellipsoid_vec.size() << std::endl;
@@ -243,34 +330,55 @@ std::vector<EllipsoidParam> ellipsoid::ellipsoidize_clusters_CGAL(
                 points.push_back(Point(3, vec.begin(), vec.end()));
             }
 
-            AME mel(eps, points.begin(), points.end(), traits);
-            if (!mel.is_full_dimensional()) continue;
-
             EllipsoidParam e;
-            auto radii = mel.axes_lengths_begin();
-            auto centroid = mel.center_cartesian_begin();
-            auto d0 = mel.axis_direction_cartesian_begin(0);
-            auto d1 = mel.axis_direction_cartesian_begin(1);
-            auto d2 = mel.axis_direction_cartesian_begin(2);
 
-            e.pose = Eigen::Matrix4d::Identity();
-            e.pose.block<3,1>(0,3) = Eigen::Vector3d(centroid[0], centroid[1], centroid[2]);
-            e.pose.block<3,3>(0,0) = (Eigen::Matrix3d() <<
-                d0[0], d1[0], d2[0],
-                d0[1], d1[1], d2[1],
-                d0[2], d1[2], d2[2]).finished();
-            e.radii = Eigen::Vector3d(radii[0], radii[1], radii[2]);
-            e.type = "roi_surface_frontier";
+            // tiny clusters can skip straight to fallback if you want
+            if (roi_surface_frontier[i].size() < 4) {
+                e = makeFallbackEllipsoid(roi_surface_frontier[i], "roi_surface_frontier", 0.005);
+            } else {
+                AME mel(eps, points.begin(), points.end(), traits);
+
+                if (!mel.is_full_dimensional()) {
+                    e = makeFallbackEllipsoid(roi_surface_frontier[i], "roi_surface_frontier", 0.005);
+                } else {
+                    auto radii = mel.axes_lengths_begin();
+                    auto centroid = mel.center_cartesian_begin();
+                    auto d0 = mel.axis_direction_cartesian_begin(0);
+                    auto d1 = mel.axis_direction_cartesian_begin(1);
+                    auto d2 = mel.axis_direction_cartesian_begin(2);
+
+                    e.pose = Eigen::Matrix4d::Identity();
+                    e.pose.block<3,1>(0,3) = Eigen::Vector3d(centroid[0], centroid[1], centroid[2]);
+                    e.pose.block<3,3>(0,0) = (Eigen::Matrix3d() <<
+                        d0[0], d1[0], d2[0],
+                        d0[1], d1[1], d2[1],
+                        d0[2], d1[2], d2[2]).finished();
+
+                    if (e.pose.block<3,3>(0,0).determinant() < 0.0) {
+                        e.pose.block<3,1>(0,2) *= -1.0;
+                    }
+
+                    e.radii = Eigen::Vector3d(
+                        std::max(0.005, radii[0]),
+                        std::max(0.005, radii[1]),
+                        std::max(0.005, radii[2])
+                    );
+                    e.type = "roi_surface_frontier";
+                }
+            }
 
             #pragma omp critical
             ellipsoid_vec.push_back(e);
         }
-        std::cout << "ROI Surface Frontier ellipsoids computed: " << roi_surface_frontier.size() << std::endl;
+
+        std::cout << "ROI Surface Frontier ellipsoids computed: "
+                << roi_surface_frontier.size() << std::endl;
     }
 
     std::cout << "Total ellipsoids after roi frontier computed: " << ellipsoid_vec.size() << std::endl;
 
-        // --- OCCUPIED CLUSTERS ---
+    // --- OCCUPIED CLUSTERS ---
+    //occupied_clusters
     if (!occupied_clusters.empty())
     {
         #pragma omp parallel for
@@ -283,29 +391,48 @@ std::vector<EllipsoidParam> ellipsoid::ellipsoidize_clusters_CGAL(
                 points.push_back(Point(3, vec.begin(), vec.end()));
             }
 
-            AME mel(eps, points.begin(), points.end(), traits);
-            if (!mel.is_full_dimensional()) continue;
-
             EllipsoidParam e;
-            auto radii = mel.axes_lengths_begin();
-            auto centroid = mel.center_cartesian_begin();
-            auto d0 = mel.axis_direction_cartesian_begin(0);
-            auto d1 = mel.axis_direction_cartesian_begin(1);
-            auto d2 = mel.axis_direction_cartesian_begin(2);
 
-            e.pose = Eigen::Matrix4d::Identity();
-            e.pose.block<3,1>(0,3) = Eigen::Vector3d(centroid[0], centroid[1], centroid[2]);
-            e.pose.block<3,3>(0,0) = (Eigen::Matrix3d() <<
-                d0[0], d1[0], d2[0],
-                d0[1], d1[1], d2[1],
-                d0[2], d1[2], d2[2]).finished();
-            e.radii = Eigen::Vector3d(radii[0], radii[1], radii[2]);
-            e.type = "occupied";
+            if (occupied_clusters[i].size() < 4) {
+                e = makeFallbackEllipsoid(occupied_clusters[i], "occupied", 0.005);
+            } else {
+                AME mel(eps, points.begin(), points.end(), traits);
+
+                if (!mel.is_full_dimensional()) {
+                    e = makeFallbackEllipsoid(occupied_clusters[i], "occupied", 0.005);
+                } else {
+                    auto radii = mel.axes_lengths_begin();
+                    auto centroid = mel.center_cartesian_begin();
+                    auto d0 = mel.axis_direction_cartesian_begin(0);
+                    auto d1 = mel.axis_direction_cartesian_begin(1);
+                    auto d2 = mel.axis_direction_cartesian_begin(2);
+
+                    e.pose = Eigen::Matrix4d::Identity();
+                    e.pose.block<3,1>(0,3) = Eigen::Vector3d(centroid[0], centroid[1], centroid[2]);
+                    e.pose.block<3,3>(0,0) = (Eigen::Matrix3d() <<
+                        d0[0], d1[0], d2[0],
+                        d0[1], d1[1], d2[1],
+                        d0[2], d1[2], d2[2]).finished();
+
+                    if (e.pose.block<3,3>(0,0).determinant() < 0.0) {
+                        e.pose.block<3,1>(0,2) *= -1.0;
+                    }
+
+                    e.radii = Eigen::Vector3d(
+                        std::max(0.005, radii[0]),
+                        std::max(0.005, radii[1]),
+                        std::max(0.005, radii[2])
+                    );
+                    e.type = "occupied";
+                }
+            }
 
             #pragma omp critical
             ellipsoid_vec.push_back(e);
         }
-        std::cout << "Occupied ellipsoids computed: " << occupied_clusters.size() << std::endl;
+
+        std::cout << "Occupied ellipsoids computed: "
+                << occupied_clusters.size() << std::endl;
     }
 
     std::cout << "Total ellipsoids: " << ellipsoid_vec.size() << std::endl;

@@ -17,8 +17,8 @@
     "plants_region": {
         "plants": [
             {
-                "min": { "x": 0.89, "y": 0, "z": 0.84 },
-                "max": { "x": 1.14, "y": 0.47, "z": 1.14 }
+                "min": { "x": 0.55, "y": 0, "z": 0.55},
+                "max": { "x": 1.34, "y": 2, "z": 1.45 }
             }
         ]
     },
@@ -29,14 +29,19 @@
     },
 
     "octomap": {
-        "resolution": 0.01
+        "resolution": 0.005
     },
 
     "xyzypgenf": {
         "dx": 0.1,
-        "dy": 0.25,
+        "dy": 0.235,
         "dz": 0.1,
-        "dyaw": 15,
-        "dpitch": 15
+        "dyaw": 5,
+        "dpitch": 5
+    },
+
+    "cylinder": {
+        "r": 1,
+        "dc": 5
     }
 }

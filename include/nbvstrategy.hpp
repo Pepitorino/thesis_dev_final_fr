@@ -13,6 +13,7 @@ public:
     //initialization and destruction
     int initialize(std::string settings_path);
     void generateViewpoints();
+    void generateViewpoints_fixedDistance();
     void kill();
 
     //inserting pointclouds
@@ -53,6 +54,7 @@ private:
     int min_clusters, max_clusters;
     double resolution;
     double dx, dy, dz, dyaw, dpitch;
+    double r, dc;
 
     voxelstruct* voxel_struct;
     ellipsoid* ellipsoid_fitting;
