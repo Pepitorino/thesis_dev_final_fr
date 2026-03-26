@@ -118,15 +118,16 @@ int nbvstrategy::initialize(std::string settings_path)
     this->dx = dx;
     this->dy = dy;
     this->dz = dz;
-    this->dyaw = M_PI/dyaw;
-    this->dpitch = M_PI/dpitch;
+    this->dyaw = M_PI/180*dyaw;
+    this->dpitch = M_PI/180*dpitch;
 
     //CYLINDER
+    auto cylinder = cfg["cylinder"];
     double r = getOrDefault(cylinder, "r", 0.5);
-    double dc = getOrDefault(cylinder "dc", 0.5);
+    double dc = getOrDefault(cylinder, "dc", 0.5);
     
     this->r = r;
-    this->dc = M_PI/dc;
+    this->dc = M_PI/180*dc;
 
     this->voxel_struct = new voxelstruct(this->resolution);
     this->ellipsoid_fitting = new ellipsoid(this->min_clusters, this->max_clusters);
@@ -173,7 +174,7 @@ void nbvstrategy::generateViewpoints()
                     for (double pitch = -M_PI/2; pitch < M_PI/2; pitch+= this->dpitch) {
                         for (double yaw = -M_PI/2; yaw < M_PI/2; yaw += this->dyaw) {
                             Eigen::Matrix<double,6,1> vp;
-                            vp << x, y, z, pitch, yaw, roll;
+                            vp << x, y, z, yaw, pitch, roll;
                             local_views.push_back(vp);
 
                         }
@@ -245,8 +246,8 @@ void nbvstrategy::generateCylindricalViewpoints()
 
                         Eigen::Matrix<double,6,1> vp;
                         vp << x, y, z,
-                              pitch,
                               yaw_center + yaw_offset,
+                              pitch,
                               roll;
 
                         local_views.push_back(vp);

@@ -17,18 +17,38 @@ voxelstruct::voxelstruct(double resolution)
     this->tree = new octomap::ColorOcTree(resolution);
 }
 
+int voxelstruct::countUnknownInBBX(
+    const Eigen::Vector3d& min,
+    const Eigen::Vector3d& max)
+{
+    if (!tree) return 0;
+
+    int unknown = 0;
+    double res = this->resolution;
+
+    for (double x = min.x(); x <= max.x(); x += res) {
+        for (double y = min.y(); y <= max.y(); y += res) {
+            for (double z = min.z(); z <= max.z(); z += res) {
+
+                octomap::point3d p(x, y, z);
+                auto* node = tree->search(p);
+
+                if (node == nullptr) {
+                    unknown++;
+                }
+            }
+        }
+    }
+
+    return unknown;
+}
+
 // for further optimization
 void voxelstruct::insertPointCloud(
     open3d::geometry::PointCloud* pcd,
     Eigen::Vector3d camera) 
 {
     if(!pcd||pcd->points_.empty()) return;
-    
-    if(this->pcd) {
-        delete this->pcd;
-        this->pcd = nullptr;
-    }
-    this->pcd = pcd;
 
     for (size_t i = 0; i < pcd->points_.size(); ++i) {
         const auto& p = pcd->points_[i];

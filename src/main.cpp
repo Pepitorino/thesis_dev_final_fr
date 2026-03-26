@@ -58,6 +58,7 @@ static void printVoxelMenu()
               << "6) Save octree\n"
               << "7) Show classified voxels (occ/frontier/roi)\n"
               << "8) Save point cloud\n"
+              << "9) Count unknown voxels in bbx\n"
               << "0) Back\n";
 }
 
@@ -108,7 +109,13 @@ static void nextBestViewMenu() {
                 continue;
             }
 
-            nbv.generateViewpoints();
+            std::string gen_method = prompt("Box (0) or Cylindrical (1): ");
+            if (gen_method == "0") {
+                nbv.generateViewpoints();
+            } else if (gen_method == "1") {
+                nbv.generateCylindricalViewpoints();
+            }
+
             viewpoints_generated = true;
             std::cout << "Viewpoints generated.\n";
         }
@@ -468,6 +475,25 @@ static void voxelstructMenu()
             saveVec3AsPLY(base + "_occupied.ply", occ);
             saveVec3AsPLY(base + "_frontier.ply", sf);
             saveVec3AsPLY(base + "_roi_frontier.ply", roi);
+        }
+        else if (c == "9") {
+            if (!voxel_struct) {
+                std::cout << "Initialize voxelstruct first.\n";
+                continue;
+            }
+
+            std::string minStr = prompt("Enter bbx_min (x,y,z): ");
+            std::string maxStr = prompt("Enter bbx_max (x,y,z): ");
+
+            Eigen::Vector3d bbx_min, bbx_max;
+            if (!parseVec3(minStr, bbx_min) || !parseVec3(maxStr, bbx_max)) {
+                std::cout << "Invalid input. Expected 3 numbers for each.\n";
+                continue;
+            }
+
+            auto unknown = voxel_struct->countUnknownInBBX(bbx_min, bbx_max); 
+
+            std::cout << "Number of unknown voxels: " << unknown << std::endl;
         }
         else {
             std::cout << "Invalid choice.\n";

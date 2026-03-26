@@ -13,7 +13,7 @@ public:
     //initialization and destruction
     int initialize(std::string settings_path);
     void generateViewpoints();
-    void generateViewpoints_fixedDistance();
+    void generateCylindricalViewpoints();
     void kill();
 
     //inserting pointclouds

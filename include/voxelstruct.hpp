@@ -23,6 +23,9 @@ public:
     std::vector<Eigen::Vector3d> getSurfaceFrontiers();
     std::vector<Eigen::Vector3d> getOccupiedVoxels();
     std::vector<Eigen::Vector3d> getROISurfaceFrontiers();
+    int countUnknownInBBX(
+    const Eigen::Vector3d& min,
+    const Eigen::Vector3d& max);
 
     // helper functions
     int size();
